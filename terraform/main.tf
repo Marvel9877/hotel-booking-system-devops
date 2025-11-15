@@ -21,31 +21,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Data source to get EKS cluster info
-data "aws_eks_cluster" "cluster" {
-  name = module.eks.cluster_name
-  depends_on = [module.eks]
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = module.eks.cluster_name
-  depends_on = [module.eks]
-}
-
-provider "kubernetes" {
-  host                   = data.aws_eks_cluster.cluster.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.cluster.token
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = data.aws_eks_cluster.cluster.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.cluster.token
-  }
-}
-
 # VPC Module
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -59,7 +34,7 @@ module "vpc" {
   public_subnets  = var.public_subnet_cidrs
 
   enable_nat_gateway   = true
-  single_nat_gateway   = var.environment == "dev" ? true : false
+  single_nat_gateway   = true
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -92,6 +67,10 @@ module "eks" {
 
   cluster_endpoint_public_access = true
 
+  # IMPORTANT: Disable creating kubernetes provider resources
+  create_aws_auth_configmap = false
+  manage_aws_auth_configmap = false
+
   eks_managed_node_groups = {
     general = {
       desired_size = var.desired_node_count
@@ -117,11 +96,36 @@ module "eks" {
   }
 }
 
+# Data sources - only after EKS is created
+data "aws_eks_cluster" "cluster" {
+  name = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+# Kubernetes provider - configured after EKS exists
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
+}
+
 # EBS CSI Driver for persistent volumes
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name = module.eks.cluster_name
   addon_name   = "aws-ebs-csi-driver"
-
   depends_on = [module.eks]
 }
 
@@ -140,7 +144,10 @@ resource "kubernetes_storage_class" "ebs_sc" {
     encrypted = "true"
   }
 
-  depends_on = [aws_eks_addon.ebs_csi_driver]
+  depends_on = [
+    module.eks,
+    aws_eks_addon.ebs_csi_driver
+  ]
 }
 
 # Namespace for the application
@@ -148,6 +155,5 @@ resource "kubernetes_namespace" "app" {
   metadata {
     name = var.app_namespace
   }
-
   depends_on = [module.eks]
 }
