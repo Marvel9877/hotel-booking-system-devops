@@ -25,6 +25,9 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Get current AWS identity (Step 2)
+data "aws_caller_identity" "current" {}
+
 # VPC Module
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -58,7 +61,7 @@ module "vpc" {
   }
 }
 
-# EKS Module
+# EKS Module with proper access configuration (Step 1)
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -71,6 +74,24 @@ module "eks" {
 
   cluster_endpoint_public_access = true
   enable_irsa = true
+
+  # Enable cluster creator admin access
+  enable_cluster_creator_admin_permissions = true
+
+  # Add current AWS identity to cluster access
+  access_entries = {
+    admin = {
+      principal_arn = data.aws_caller_identity.current.arn
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
 
   eks_managed_node_groups = {
     general = {
@@ -99,11 +120,11 @@ module "eks" {
 
 # Wait for cluster to be fully ready
 resource "time_sleep" "wait_for_cluster" {
-  create_duration = "30s"
+  create_duration = "60s"
   depends_on = [module.eks]
 }
 
-# Data sources
+# Data sources - only after cluster is ready
 data "aws_eks_cluster" "cluster" {
   name = module.eks.cluster_name
   depends_on = [time_sleep.wait_for_cluster]
@@ -131,9 +152,9 @@ provider "helm" {
 
 # EBS CSI Driver addon with proper wait
 resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name             = module.eks.cluster_name
-  addon_name               = "aws-ebs-csi-driver"
-  addon_version            = "v1.25.0-eksbuild.1"
+  cluster_name                = module.eks.cluster_name
+  addon_name                  = "aws-ebs-csi-driver"
+  addon_version               = "v1.25.0-eksbuild.1"
   resolve_conflicts_on_create = "OVERWRITE"
   
   depends_on = [
@@ -147,9 +168,9 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   }
 }
 
-# Wait for EBS CSI driver
+# Wait for EBS CSI driver to be ready
 resource "time_sleep" "wait_for_ebs_csi" {
-  create_duration = "60s"
+  create_duration = "90s"
   depends_on = [aws_eks_addon.ebs_csi_driver]
 }
 
