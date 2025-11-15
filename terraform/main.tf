@@ -25,9 +25,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-# Get current AWS identity (Step 2)
-data "aws_caller_identity" "current" {}
-
 # VPC Module
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -61,7 +58,7 @@ module "vpc" {
   }
 }
 
-# EKS Module with proper access configuration (Step 1)
+# EKS Module - Simplified without duplicate access entries
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -75,23 +72,8 @@ module "eks" {
   cluster_endpoint_public_access = true
   enable_irsa = true
 
-  # Enable cluster creator admin access
+  # This single setting grants the cluster creator full admin access
   enable_cluster_creator_admin_permissions = true
-
-  # Add current AWS identity to cluster access
-  access_entries = {
-    admin = {
-      principal_arn = data.aws_caller_identity.current.arn
-      policy_associations = {
-        admin = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
-  }
 
   eks_managed_node_groups = {
     general = {
@@ -124,7 +106,7 @@ resource "time_sleep" "wait_for_cluster" {
   depends_on = [module.eks]
 }
 
-# Data sources - only after cluster is ready
+# Data sources
 data "aws_eks_cluster" "cluster" {
   name = module.eks.cluster_name
   depends_on = [time_sleep.wait_for_cluster]
@@ -150,7 +132,7 @@ provider "helm" {
   }
 }
 
-# EBS CSI Driver addon with proper wait
+# EBS CSI Driver addon
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name                = module.eks.cluster_name
   addon_name                  = "aws-ebs-csi-driver"
@@ -168,7 +150,7 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   }
 }
 
-# Wait for EBS CSI driver to be ready
+# Wait for EBS CSI driver
 resource "time_sleep" "wait_for_ebs_csi" {
   create_duration = "90s"
   depends_on = [aws_eks_addon.ebs_csi_driver]
