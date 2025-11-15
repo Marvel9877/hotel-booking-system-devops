@@ -11,8 +11,8 @@ public_subnet_cidrs = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
 
 # EKS Configuration
 kubernetes_version = "1.28"
-node_instance_types = ["t3.medium"]
-desired_node_count = 2
+node_instance_types = ["t3.small"]
+desired_node_count = 1
 min_node_count = 1
 max_node_count = 4
 
