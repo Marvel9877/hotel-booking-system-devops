@@ -12,7 +12,7 @@ resource "kubernetes_secret" "mongodb" {
   type = "Opaque"
 }
 
-# MongoDB PersistentVolumeClaim
+# MongoDB PersistentVolumeClaim with extended timeout
 resource "kubernetes_persistent_volume_claim" "mongodb" {
   metadata {
     name      = "mongodb-pvc"
@@ -29,6 +29,12 @@ resource "kubernetes_persistent_volume_claim" "mongodb" {
       }
     }
   }
+
+  timeouts {
+    create = "10m"
+  }
+
+  wait_for_first_consumer = true
 
   depends_on = [kubernetes_storage_class.ebs_sc]
 }
@@ -71,7 +77,7 @@ resource "kubernetes_stateful_set" "mongodb" {
           }
 
           env {
-            name = "MONGO_INITDB_ROOT_USERNAME"
+            name  = "MONGO_INITDB_ROOT_USERNAME"
             value = "admin"
           }
 
@@ -135,6 +141,26 @@ resource "kubernetes_stateful_set" "mongodb" {
         }
       }
     }
+
+    volume_claim_template {
+      metadata {
+        name = "mongodb-data"
+      }
+      spec {
+        access_modes       = ["ReadWriteOnce"]
+        storage_class_name = kubernetes_storage_class.ebs_sc.metadata[0].name
+        resources {
+          requests = {
+            storage = "10Gi"
+          }
+        }
+      }
+    }
+  }
+
+  timeouts {
+    create = "15m"
+    delete = "10m"
   }
 
   depends_on = [kubernetes_persistent_volume_claim.mongodb]
@@ -161,7 +187,7 @@ resource "kubernetes_service" "mongodb" {
       protocol    = "TCP"
     }
 
-    cluster_ip = "None" # Headless service for StatefulSet
+    cluster_ip = "None"
     type       = "ClusterIP"
   }
 
