@@ -14,6 +14,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.11"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.9"
+    }
   }
 }
 
@@ -66,6 +70,7 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   cluster_endpoint_public_access = true
+  enable_irsa = true
 
   eks_managed_node_groups = {
     general = {
@@ -92,18 +97,24 @@ module "eks" {
   }
 }
 
-# Data sources - only after EKS is created
+# Wait for cluster to be fully ready
+resource "time_sleep" "wait_for_cluster" {
+  create_duration = "30s"
+  depends_on = [module.eks]
+}
+
+# Data sources
 data "aws_eks_cluster" "cluster" {
   name = module.eks.cluster_name
-  depends_on = [module.eks]
+  depends_on = [time_sleep.wait_for_cluster]
 }
 
 data "aws_eks_cluster_auth" "cluster" {
   name = module.eks.cluster_name
-  depends_on = [module.eks]
+  depends_on = [time_sleep.wait_for_cluster]
 }
 
-# Kubernetes provider - configured after EKS exists
+# Kubernetes provider
 provider "kubernetes" {
   host                   = data.aws_eks_cluster.cluster.endpoint
   cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
@@ -118,14 +129,31 @@ provider "helm" {
   }
 }
 
-# EBS CSI Driver for persistent volumes
+# EBS CSI Driver addon with proper wait
 resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name = module.eks.cluster_name
-  addon_name   = "aws-ebs-csi-driver"
-  depends_on = [module.eks]
+  cluster_name             = module.eks.cluster_name
+  addon_name               = "aws-ebs-csi-driver"
+  addon_version            = "v1.25.0-eksbuild.1"
+  resolve_conflicts_on_create = "OVERWRITE"
+  
+  depends_on = [
+    module.eks,
+    time_sleep.wait_for_cluster
+  ]
+  
+  timeouts {
+    create = "30m"
+    delete = "20m"
+  }
 }
 
-# Storage Class for EBS volumes
+# Wait for EBS CSI driver
+resource "time_sleep" "wait_for_ebs_csi" {
+  create_duration = "60s"
+  depends_on = [aws_eks_addon.ebs_csi_driver]
+}
+
+# Storage Class
 resource "kubernetes_storage_class" "ebs_sc" {
   metadata {
     name = "ebs-sc"
@@ -136,20 +164,18 @@ resource "kubernetes_storage_class" "ebs_sc" {
   volume_binding_mode = "WaitForFirstConsumer"
 
   parameters = {
-    type = "gp3"
+    type      = "gp3"
     encrypted = "true"
   }
 
-  depends_on = [
-    module.eks,
-    aws_eks_addon.ebs_csi_driver
-  ]
+  depends_on = [time_sleep.wait_for_ebs_csi]
 }
 
-# Namespace for the application
+# Application namespace
 resource "kubernetes_namespace" "app" {
   metadata {
     name = var.app_namespace
   }
-  depends_on = [module.eks]
+  
+  depends_on = [time_sleep.wait_for_cluster]
 }
