@@ -21,20 +21,23 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = "aws-load-balancer-controller"
   }
 
-  # Add timeout and wait
   timeout = 600
   wait    = true
 
   depends_on = [
     module.eks,
     kubernetes_namespace.app,
-    time_sleep.wait_for_cluster
+    null_resource.wait_for_cluster  # Changed from time_sleep to null_resource
   ]
 }
 
 # Wait for ALB controller to be ready
-resource "time_sleep" "wait_for_alb_controller" {
-  create_duration = "30s"
+resource "null_resource" "wait_for_alb_controller" {
+  provisioner "local-exec" {
+    command = "timeout /t 30 /nobreak"
+    interpreter = ["cmd", "/c"]
+  }
+
   depends_on = [helm_release.aws_load_balancer_controller]
 }
 
@@ -86,7 +89,7 @@ resource "kubernetes_ingress_v1" "app" {
   }
 
   depends_on = [
-    time_sleep.wait_for_alb_controller,
+    null_resource.wait_for_alb_controller,  # Changed from time_sleep
     kubernetes_service.frontend,
     kubernetes_service.backend
   ]
