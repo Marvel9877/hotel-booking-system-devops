@@ -12,7 +12,7 @@ resource "kubernetes_secret" "mongodb" {
   type = "Opaque"
 }
 
-# MongoDB PersistentVolumeClaim with extended timeout
+# MongoDB PersistentVolumeClaim
 resource "kubernetes_persistent_volume_claim" "mongodb" {
   metadata {
     name      = "mongodb-pvc"
@@ -33,8 +33,6 @@ resource "kubernetes_persistent_volume_claim" "mongodb" {
   timeouts {
     create = "10m"
   }
-
-  wait_for_first_consumer = true
 
   depends_on = [kubernetes_storage_class.ebs_sc]
 }
@@ -137,21 +135,6 @@ resource "kubernetes_stateful_set" "mongodb" {
           name = "mongodb-data"
           persistent_volume_claim {
             claim_name = kubernetes_persistent_volume_claim.mongodb.metadata[0].name
-          }
-        }
-      }
-    }
-
-    volume_claim_template {
-      metadata {
-        name = "mongodb-data"
-      }
-      spec {
-        access_modes       = ["ReadWriteOnce"]
-        storage_class_name = kubernetes_storage_class.ebs_sc.metadata[0].name
-        resources {
-          requests = {
-            storage = "10Gi"
           }
         }
       }
