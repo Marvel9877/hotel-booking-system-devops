@@ -6,7 +6,7 @@ resource "kubernetes_config_map" "frontend" {
   }
 
   data = {
-    REACT_APP_API_URL = "http://backend:5000/api"
+    REACT_APP_API_URL = "http://backend.${kubernetes_namespace.app.metadata[0].name}.svc.cluster.local:5000/api"
   }
 }
 
@@ -37,9 +37,20 @@ resource "kubernetes_deployment" "frontend" {
       }
 
       spec {
+        # Wait for backend to be ready
+        init_container {
+          name  = "wait-for-backend"
+          image = "busybox:1.35"
+          command = [
+            "sh",
+            "-c",
+            "until nc -z backend.${kubernetes_namespace.app.metadata[0].name}.svc.cluster.local 5000; do echo waiting for backend; sleep 5; done; echo backend is ready"
+          ]
+        }
+
         container {
-          name  = "frontend"
-          image = var.frontend_image
+          name              = "frontend"
+          image             = var.frontend_image
           image_pull_policy = "Always"
 
           port {
@@ -90,25 +101,14 @@ resource "kubernetes_deployment" "frontend" {
             failure_threshold     = 3
           }
         }
-
-        # Wait for backend to be ready
-        init_container {
-          name  = "wait-for-backend"
-          image = "busybox:1.35"
-          command = [
-            "sh",
-            "-c",
-            "until nc -z backend 5000; do echo waiting for backend; sleep 2; done"
-          ]
-        }
       }
     }
   }
 
   timeouts {
-    create = "10m"
+    create = "15m"
     update = "10m"
-    delete = "10m"
+    delete = "5m"
   }
 
   depends_on = [
