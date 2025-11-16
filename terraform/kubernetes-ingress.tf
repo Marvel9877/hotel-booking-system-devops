@@ -21,13 +21,19 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = "aws-load-balancer-controller"
   }
 
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.aws_load_balancer_controller.arn
+  }
+
   timeout = 600
   wait    = true
 
   depends_on = [
     module.eks,
     kubernetes_namespace.app,
-    null_resource.wait_for_cluster
+    null_resource.wait_for_cluster,
+    aws_iam_role_policy_attachment.aws_load_balancer_controller
   ]
 }
 
