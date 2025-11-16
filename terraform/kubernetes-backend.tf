@@ -152,6 +152,12 @@ resource "kubernetes_deployment" "backend" {
     }
   }
 
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "10m"
+  }
+
   depends_on = [
     kubernetes_service.mongodb,
     kubernetes_config_map.backend,
