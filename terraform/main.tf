@@ -146,7 +146,7 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   ]
   
   timeouts {
-    create = "30m"
+    create = "60m"
     update = "30m"
     delete = "20m"
   }
