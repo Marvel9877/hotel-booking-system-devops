@@ -141,12 +141,12 @@ resource "kubernetes_deployment" "backend" {
 
           resources {
             requests = {
-              memory = "256Mi"
-              cpu    = "200m"
+              memory = "128Mi"
+              cpu    = "100m"
             }
             limits = {
-              memory = "512Mi"
-              cpu    = "500m"
+              memory = "256Mi"
+              cpu    = "300m"
             }
           }
 
@@ -177,9 +177,9 @@ resource "kubernetes_deployment" "backend" {
   }
 
   timeouts {
-    create = "15m"
-    update = "10m"
-    delete = "5m"
+    create = "5m"
+    update = "5m"
+    delete = "2m"
   }
 
   wait_for_rollout = false
@@ -191,6 +191,7 @@ resource "kubernetes_deployment" "backend" {
   ]
 
   lifecycle {
+    create_before_destroy = true
     ignore_changes = [
       metadata[0].annotations,
       spec[0].template[0].metadata[0].annotations
