@@ -280,7 +280,7 @@ stage('Cleanup Existing Resources') {
                                 // Get cluster name from terraform output or set it directly
                                 def clusterName = "mern-ecommerce" // Change this to match your cluster name
                                 def region = "us-east-1" // Change this to match your region
-                                def namespace = "app-namespace" // Change this to match your namespace
+                                def namespace = "mern-app" // Change this to match your namespace
                                 
                                 bat """
                                     set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
