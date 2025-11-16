@@ -105,6 +105,12 @@ resource "kubernetes_deployment" "frontend" {
     }
   }
 
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "10m"
+  }
+
   depends_on = [
     kubernetes_service.backend,
     kubernetes_config_map.frontend
