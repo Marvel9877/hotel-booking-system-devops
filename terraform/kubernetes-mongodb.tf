@@ -2,7 +2,7 @@
 resource "kubernetes_secret" "mongodb" {
   metadata {
     name      = "mongodb-secret"
-    namespace = kubernetes_namespace.app.metadata[0].name
+    namespace = var.app_namespace
   }
 
   data = {
@@ -12,11 +12,11 @@ resource "kubernetes_secret" "mongodb" {
   type = "Opaque"
 }
 
-# MongoDB Deployment (using EmptyDir - fast, no persistent storage)
+# MongoDB Deployment
 resource "kubernetes_deployment" "mongodb" {
   metadata {
     name      = "mongodb"
-    namespace = kubernetes_namespace.app.metadata[0].name
+    namespace = var.app_namespace
     labels = {
       app = "mongodb"
     }
@@ -73,16 +73,16 @@ resource "kubernetes_deployment" "mongodb" {
             mount_path = "/data/db"
           }
 
-resources {
-  requests = {
-    memory = "256Mi"  # Changed from 512Mi
-    cpu    = "100m"   # Changed from 250m
-  }
-  limits = {
-    memory = "512Mi"  # Changed from 1Gi
-    cpu    = "250m"   # Changed from 500m
-  }
-}
+          resources {
+            requests = {
+              memory = "256Mi"
+              cpu    = "100m"
+            }
+            limits = {
+              memory = "512Mi"
+              cpu    = "250m"
+            }
+          }
 
           liveness_probe {
             tcp_socket {
@@ -109,6 +109,8 @@ resources {
     }
   }
 
+  wait_for_rollout = false
+
   timeouts {
     create = "10m"
     update = "10m"
@@ -116,16 +118,22 @@ resources {
   }
 
   depends_on = [
-    kubernetes_secret.mongodb,
-    null_resource.wait_for_cluster
+    kubernetes_secret.mongodb
   ]
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations,
+      spec[0].template[0].metadata[0].annotations
+    ]
+  }
 }
 
 # MongoDB Service
 resource "kubernetes_service" "mongodb" {
   metadata {
     name      = "mongodb"
-    namespace = kubernetes_namespace.app.metadata[0].name
+    namespace = var.app_namespace
     labels = {
       app = "mongodb"
     }
