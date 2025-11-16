@@ -278,7 +278,7 @@ stage('Cleanup Existing Resources') {
                                 string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
                             ]) {
                                 // Get cluster name from terraform output or set it directly
-                                def clusterName = "taskmanager-app" // Change this to match your cluster name
+                                def clusterName = "mern-ecommerce" // Change this to match your cluster name
                                 def region = "us-east-1" // Change this to match your region
                                 def namespace = "app-namespace" // Change this to match your namespace
                                 
