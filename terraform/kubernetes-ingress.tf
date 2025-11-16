@@ -27,15 +27,14 @@ resource "helm_release" "aws_load_balancer_controller" {
   depends_on = [
     module.eks,
     kubernetes_namespace.app,
-    null_resource.wait_for_cluster  # Changed from time_sleep to null_resource
+    null_resource.wait_for_cluster
   ]
 }
 
 # Wait for ALB controller to be ready
 resource "null_resource" "wait_for_alb_controller" {
   provisioner "local-exec" {
-    command = "timeout /t 30 /nobreak"
-    interpreter = ["cmd", "/c"]
+    command = "powershell -Command \"Write-Host 'Waiting for ALB controller...'; Start-Sleep -Seconds 30\""
   }
 
   depends_on = [helm_release.aws_load_balancer_controller]
@@ -89,7 +88,7 @@ resource "kubernetes_ingress_v1" "app" {
   }
 
   depends_on = [
-    null_resource.wait_for_alb_controller,  # Changed from time_sleep
+    null_resource.wait_for_alb_controller,
     kubernetes_service.frontend,
     kubernetes_service.backend
   ]
