@@ -55,7 +55,6 @@ resource "kubernetes_ingress_v1" "app" {
       "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
       "alb.ingress.kubernetes.io/target-type"      = "ip"
       "alb.ingress.kubernetes.io/listen-ports"     = "[{\"HTTP\": 80}]"
-      "alb.ingress.kubernetes.io/healthcheck-path" = "/"
     }
   }
   
@@ -65,7 +64,7 @@ resource "kubernetes_ingress_v1" "app" {
     rule {
       http {
         path {
-          path      = "/api"      # Remove the /* wildcard
+          path      = "/api"      # Remove /* - just /api
           path_type = "Prefix"
           backend {
             service {
@@ -77,7 +76,7 @@ resource "kubernetes_ingress_v1" "app" {
           }
         }
         path {
-          path      = "/"         # Remove the /* wildcard
+          path      = "/"         # Remove /* - just /
           path_type = "Prefix"
           backend {
             service {
