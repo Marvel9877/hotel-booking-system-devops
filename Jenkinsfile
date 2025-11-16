@@ -265,36 +265,85 @@ pipeline {
                 }
             }
         }
+
         
-        stage('Terraform Apply') {
-            when {
-                expression { 
-                    params.PIPELINE_ACTION == 'terraform-apply' ||
-                    params.PIPELINE_ACTION == 'terraform-clean-and-apply' ||
-                    params.PIPELINE_ACTION == 'full-deploy'
-                }
-            }
-            steps {
-                echo '🚀 Applying Terraform changes automatically...'
-                echo '⚠️ WARNING: This will create AWS resources and incur costs!'
-                dir('terraform') {
-                    withCredentials([
-                        string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                        string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                        string(credentialsId: 'mongodb-password', variable: 'MONGODB_PASSWORD'),
-                        string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
-                    ]) {
-                        bat '''
-                            set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
-                            set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
-                            set TF_VAR_mongodb_root_password=%MONGODB_PASSWORD%
-                            set TF_VAR_jwt_secret=%JWT_SECRET%
-                            terraform apply -auto-approve tfplan
-                        '''
-                    }
-                }
+        
+// Add this stage after Terraform Plan and before Terraform Apply
+stage('Import Existing K8s Resources') {
+    when {
+        expression { 
+            params.PIPELINE_ACTION == 'terraform-apply' ||
+            params.PIPELINE_ACTION == 'terraform-clean-and-apply' ||
+            params.PIPELINE_ACTION == 'full-deploy'
+        }
+    }
+    steps {
+        echo '📥 Importing existing Kubernetes resources into Terraform state...'
+        dir('terraform') {
+            withCredentials([
+                string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+            ]) {
+                bat '''
+                    set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
+                    set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
+                    
+                    echo "=== Checking and importing existing resources ==="
+                    
+                    # Import namespace first if it exists
+                    kubectl get namespace hotel-app >nul 2>&1
+                    if not errorlevel 1 (
+                        terraform import kubernetes_namespace.hotel_app hotel-app 2>nul && echo "✓ Namespace imported" || echo "⚠ Namespace already managed"
+                    )
+                    
+                    # Import backend deployment
+                    kubectl get deployment backend -n hotel-app >nul 2>&1
+                    if not errorlevel 1 (
+                        terraform import kubernetes_deployment.backend hotel-app/backend 2>nul && echo "✓ Backend deployment imported" || echo "⚠ Backend already managed"
+                    )
+                    
+                    # Import frontend deployment
+                    kubectl get deployment frontend -n hotel-app >nul 2>&1
+                    if not errorlevel 1 (
+                        terraform import kubernetes_deployment.frontend hotel-app/frontend 2>nul && echo "✓ Frontend deployment imported" || echo "⚠ Frontend already managed"
+                    )
+                    
+                    echo "=== Import process completed ==="
+                '''
             }
         }
+    }
+}
+
+// Then modify your existing Terraform Apply stage to be simpler:
+stage('Terraform Apply') {
+    when {
+        expression { 
+            params.PIPELINE_ACTION == 'terraform-apply' ||
+            params.PIPELINE_ACTION == 'terraform-clean-and-apply' ||
+            params.PIPELINE_ACTION == 'full-deploy'
+        }
+    }
+    steps {
+        echo '🚀 Applying Terraform configuration...'
+        dir('terraform') {
+            withCredentials([
+                string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
+                string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
+                string(credentialsId: 'mongodb-password', variable: 'MONGODB_PASSWORD'),
+                string(credentialsId: 'jwt-secret', variable: 'JWT_SECRET')
+            ]) {
+                bat '''
+                    set AWS_ACCESS_KEY_ID=%AWS_ACCESS_KEY_ID%
+                    set AWS_SECRET_ACCESS_KEY=%AWS_SECRET_ACCESS_KEY%
+                    set TF_VAR_mongodb_root_password=%MONGODB_PASSWORD%
+                    set TF_VAR_jwt_secret=%JWT_SECRET%
+                    terraform apply -auto-approve
+                '''
+            }
+        }
+    }
+}
         
         stage('Configure kubectl') {
             when {
