@@ -12,7 +12,7 @@ resource "kubernetes_secret" "mongodb" {
   type = "Opaque"
 }
 
-# MongoDB PersistentVolumeClaim
+# MongoDB PersistentVolumeClaim with MUCH longer timeout
 resource "kubernetes_persistent_volume_claim" "mongodb" {
   metadata {
     name      = "mongodb-pvc"
@@ -31,10 +31,19 @@ resource "kubernetes_persistent_volume_claim" "mongodb" {
   }
 
   timeouts {
-    create = "10m"
+    create = "20m"  # Increased to 20 minutes
   }
 
-  depends_on = [kubernetes_storage_class.ebs_sc]
+  depends_on = [
+    kubernetes_storage_class.ebs_sc,
+    time_sleep.wait_for_storage_class
+  ]
+}
+
+# Wait for PVC to be bound
+resource "time_sleep" "wait_for_pvc" {
+  create_duration = "60s"
+  depends_on = [kubernetes_persistent_volume_claim.mongodb]
 }
 
 # MongoDB StatefulSet
@@ -114,20 +123,20 @@ resource "kubernetes_stateful_set" "mongodb" {
             exec {
               command = ["mongosh", "--eval", "db.adminCommand('ping')"]
             }
-            initial_delay_seconds = 30
+            initial_delay_seconds = 60
             period_seconds        = 10
             timeout_seconds       = 5
-            failure_threshold     = 3
+            failure_threshold     = 6
           }
 
           readiness_probe {
             exec {
               command = ["mongosh", "--eval", "db.adminCommand('ping')"]
             }
-            initial_delay_seconds = 10
-            period_seconds        = 5
-            timeout_seconds       = 3
-            failure_threshold     = 3
+            initial_delay_seconds = 30
+            period_seconds        = 10
+            timeout_seconds       = 5
+            failure_threshold     = 6
           }
         }
 
@@ -142,11 +151,15 @@ resource "kubernetes_stateful_set" "mongodb" {
   }
 
   timeouts {
-    create = "15m"
+    create = "20m"
+    update = "15m"
     delete = "10m"
   }
 
-  depends_on = [kubernetes_persistent_volume_claim.mongodb]
+  depends_on = [
+    kubernetes_persistent_volume_claim.mongodb,
+    time_sleep.wait_for_pvc
+  ]
 }
 
 # MongoDB Service
