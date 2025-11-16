@@ -138,6 +138,7 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   addon_name                  = "aws-ebs-csi-driver"
   addon_version               = "v1.25.0-eksbuild.1"
   resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
   
   depends_on = [
     module.eks,
@@ -146,13 +147,34 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   
   timeouts {
     create = "30m"
+    update = "30m"
     delete = "20m"
   }
 }
 
-# Wait for EBS CSI driver
+# EBS CSI Driver addon
+resource "aws_eks_addon" "ebs_csi_driver" {
+  cluster_name                = module.eks.cluster_name
+  addon_name                  = "aws-ebs-csi-driver"
+  addon_version               = "v1.25.0-eksbuild.1"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  
+  depends_on = [
+    module.eks,
+    time_sleep.wait_for_cluster
+  ]
+  
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "20m"
+  }
+}
+
+# Wait LONGER for EBS CSI driver to be fully operational
 resource "time_sleep" "wait_for_ebs_csi" {
-  create_duration = "90s"
+  create_duration = "180s"  # Increased to 3 minutes
   depends_on = [aws_eks_addon.ebs_csi_driver]
 }
 
@@ -165,13 +187,21 @@ resource "kubernetes_storage_class" "ebs_sc" {
   storage_provisioner = "ebs.csi.aws.com"
   reclaim_policy      = "Retain"
   volume_binding_mode = "WaitForFirstConsumer"
+  allow_volume_expansion = true
 
   parameters = {
     type      = "gp3"
     encrypted = "true"
+    fsType    = "ext4"
   }
 
   depends_on = [time_sleep.wait_for_ebs_csi]
+}
+
+# Wait for storage class to be ready
+resource "time_sleep" "wait_for_storage_class" {
+  create_duration = "30s"
+  depends_on = [kubernetes_storage_class.ebs_sc]
 }
 
 # Application namespace
