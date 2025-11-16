@@ -73,16 +73,16 @@ resource "kubernetes_deployment" "mongodb" {
             mount_path = "/data/db"
           }
 
-          resources {
-            requests = {
-              memory = "512Mi"
-              cpu    = "250m"
-            }
-            limits = {
-              memory = "1Gi"
-              cpu    = "500m"
-            }
-          }
+resources {
+  requests = {
+    memory = "256Mi"  # Changed from 512Mi
+    cpu    = "100m"   # Changed from 250m
+  }
+  limits = {
+    memory = "512Mi"  # Changed from 1Gi
+    cpu    = "250m"   # Changed from 500m
+  }
+}
 
           liveness_probe {
             tcp_socket {
