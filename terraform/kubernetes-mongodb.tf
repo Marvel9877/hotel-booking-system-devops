@@ -12,52 +12,7 @@ resource "kubernetes_secret" "mongodb" {
   type = "Opaque"
 }
 
-# Verify EBS CSI driver is ready before creating PVC
-resource "null_resource" "verify_ebs_csi_ready" {
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo Waiting for EBS CSI driver to be ready...
-      timeout /t 120 /nobreak
-      kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=aws-ebs-csi-driver -n kube-system --timeout=600s || echo CSI driver pods may not be ready yet
-    EOT
-    interpreter = ["cmd", "/c"]
-  }
-
-  depends_on = [
-    time_sleep.wait_for_ebs_csi,
-    kubernetes_storage_class.ebs_sc
-  ]
-}
-
-# MongoDB PersistentVolumeClaim with maximum timeout
-resource "kubernetes_persistent_volume_claim" "mongodb" {
-  metadata {
-    name      = "mongodb-pvc"
-    namespace = kubernetes_namespace.app.metadata[0].name
-  }
-
-  spec {
-    access_modes       = ["ReadWriteOnce"]
-    storage_class_name = kubernetes_storage_class.ebs_sc.metadata[0].name
-
-    resources {
-      requests = {
-        storage = "10Gi"
-      }
-    }
-  }
-
-  timeouts {
-    create = "60m"  # Maximum 1 hour timeout
-  }
-
-  depends_on = [
-    kubernetes_storage_class.ebs_sc,
-    null_resource.verify_ebs_csi_ready
-  ]
-}
-
-# MongoDB StatefulSet - simplified without separate PVC
+# MongoDB StatefulSet - uses volume claim template (no separate PVC)
 resource "kubernetes_stateful_set" "mongodb" {
   metadata {
     name      = "mongodb"
@@ -153,7 +108,7 @@ resource "kubernetes_stateful_set" "mongodb" {
       }
     }
 
-    # Use volume_claim_template instead of separate PVC
+    # Volume claim template - PVC created automatically by StatefulSet
     volume_claim_template {
       metadata {
         name = "mongodb-data"
@@ -171,13 +126,15 @@ resource "kubernetes_stateful_set" "mongodb" {
   }
 
   timeouts {
-    create = "60m"  # Maximum 1 hour
+    create = "60m"
     update = "30m"
     delete = "15m"
   }
 
   depends_on = [
-    kubernetes_persistent_volume_claim.mongodb
+    kubernetes_storage_class.ebs_sc,
+    null_resource.wait_for_storage_class,
+    kubernetes_secret.mongodb
   ]
 }
 
